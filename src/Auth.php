@@ -128,7 +128,7 @@ class Auth {
 				if (isset($parts[0]) && isset($parts[1])) {
 					try {
 						$rememberData = $this->db->selectRow(
-							'SELECT a.user, a.token, a.expires, b.email, b.username FROM users_remembered AS a JOIN users AS b ON a.user = b.id WHERE a.selector = ?',
+							'SELECT a.user, a.token, a.expires, b.email, b.username FROM users_remembered AS a JOIN tgs_user_profile AS b ON a.user = b.user_id WHERE a.selector = ?',
 							[ $parts[0] ]
 						);
 					}
@@ -431,9 +431,9 @@ class Auth {
 	private function onLoginSuccessful($userId, $email, $username, $remembered) {
 		try {
 			$this->db->update(
-				'users',
+				'tgs_user_profile',
 				[ 'last_login' => time() ],
-				[ 'id' => $userId ]
+				[ 'user_id' => $userId ]
 			);
 		}
 		catch (Error $e) {
@@ -534,7 +534,7 @@ class Auth {
 				if ($confirmationData['expires'] >= time()) {
 					try {
 						$this->db->update(
-							'users',
+							'tgs_user_profile',
 							[ 'verified' => 1 ],
 							[ 'email' => $confirmationData['email'] ]
 						);
@@ -584,7 +584,7 @@ class Auth {
 
 			try {
 				$passwordInDatabase = $this->db->selectValue(
-					'SELECT password FROM users WHERE id = ?',
+					'SELECT password FROM tgs_user_profile WHERE user_id = ?',
 					[ $userId ]
 				);
 			}
@@ -625,9 +625,9 @@ class Auth {
 
 		try {
 			$this->db->update(
-				'users',
+				'tgs_user_profile',
 				[ 'password' => $newPassword ],
-				[ 'id' => $userId ]
+				[ 'user_id' => $userId ]
 			);
 		}
 		catch (Error $e) {
@@ -676,7 +676,7 @@ class Auth {
 
 		$userData = $this->getUserDataByEmailAddress(
 			$email,
-			[ 'id', 'verified' ]
+			[ 'user_id', 'verified' ]
 		);
 
 		// ensure that the account has been verified before initiating a password reset
@@ -684,10 +684,10 @@ class Auth {
 			throw new EmailNotVerifiedException();
 		}
 
-		$openRequests = (int) $this->getOpenPasswordResetRequests($userData['id']);
+		$openRequests = (int) $this->getOpenPasswordResetRequests($userData['user_id']);
 
 		if ($openRequests < $maxOpenRequests) {
-			$this->createPasswordResetRequest($userData['id'], $requestExpiresAfter, $callback);
+			$this->createPasswordResetRequest($userData['user_id'], $requestExpiresAfter, $callback);
 		}
 		else {
 			self::onTooManyRequests($requestExpiresAfter);
@@ -743,7 +743,7 @@ class Auth {
 			if ($username !== null) {
 				// count the number of users who do already have that specified username
 				$occurrencesOfUsername = $this->db->selectValue(
-					'SELECT COUNT(*) FROM users WHERE username = ?',
+					'SELECT COUNT(*) FROM tgs_user_profile WHERE username = ?',
 					[ $username ]
 				);
 
@@ -760,7 +760,7 @@ class Auth {
 
 		try {
 			$this->db->insert(
-				'users',
+				'tgs_user_profile',
 				[
 					'email' => $email,
 					'password' => $password,
@@ -809,7 +809,7 @@ class Auth {
 			try {
 				$userData = $this->getUserDataByEmailAddress(
 					$email,
-					[ 'id', 'email', 'password', 'verified', 'username' ]
+					[ 'user_id', 'email', 'password', 'verified', 'username' ]
 				);
 			}
 			// if there is no user with the specified email address
@@ -829,7 +829,7 @@ class Auth {
 			try {
 				$userData = $this->getUserDataByUsername(
 					$username,
-					[ 'id', 'email', 'password', 'verified', 'username' ]
+					[ 'user_id', 'email', 'password', 'verified', 'username' ]
 				);
 			}
 			// if there is no user with the specified username
@@ -863,11 +863,11 @@ class Auth {
 			// if the password needs to be re-hashed to keep up with improving password cracking techniques
 			if (password_needs_rehash($userData['password'], PASSWORD_DEFAULT)) {
 				// create a new hash from the password and update it in the database
-				$this->updatePassword($userData['id'], $password);
+				$this->updatePassword($userData['user_id'], $password);
 			}
 
 			if ($userData['verified'] === 1) {
-				$this->onLoginSuccessful($userData['id'], $userData['email'], $userData['username'], false);
+				$this->onLoginSuccessful($userData['user_id'], $userData['email'], $userData['username'], false);
 
 				// continue to support the old parameter format
 				if ($rememberDuration === true) {
@@ -878,7 +878,7 @@ class Auth {
 				}
 
 				if ($rememberDuration !== null) {
-					$this->createRememberDirective($userData['id'], $rememberDuration);
+					$this->createRememberDirective($userData['user_id'], $rememberDuration);
 				}
 
 				return;
@@ -917,7 +917,7 @@ class Auth {
 		try {
 			$projection = implode(', ', $requestedColumns);
 			$userData = $this->db->selectRow(
-				'SELECT ' . $projection . ' FROM users WHERE email = ?',
+				'SELECT ' . $projection . ' FROM tgs_user_profile WHERE email = ?',
 				[ $email ]
 			);
 		}
@@ -949,7 +949,7 @@ class Auth {
 		try {
 			$projection = implode(', ', $requestedColumns);
 			$users = $this->db->select(
-				'SELECT ' . $projection . ' FROM users WHERE username = ? LIMIT 0, 2',
+				'SELECT ' . $projection . ' FROM tgs_user_profile WHERE username = ? LIMIT 0, 2',
 				[ $username ]
 			);
 		}
